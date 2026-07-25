@@ -18,7 +18,8 @@ ADMIN_SECRET = os.environ.get("ADMIN_SECRET")  # /discover_quote uchun alohida k
 SIGNATURE = "\n\nAlisher Asqad Ali\n@korean_aforizm"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FONT_KOREAN = os.path.join(BASE_DIR, "NotoSansKR.ttf")
+FONT_KOREAN = os.path.join(BASE_DIR, "Pretendard-Bold.otf")  # Koreyada eng ko'p ishlatiladigan zamonaviy shrift
+FONT_KOREAN_SEMIBOLD = os.path.join(BASE_DIR, "Pretendard-SemiBold.otf")
 FONT_LATIN = os.path.join(BASE_DIR, "NotoSans.ttf")
 FONT_LATIN_BOLD = os.path.join(BASE_DIR, "NotoSans-Bold.ttf")
 
@@ -73,12 +74,12 @@ def get_working_text_model() -> str:
 
 def generate_background_image(mood: str) -> bytes:
     prompt = (
-        f"{mood}, vintage editorial collage illustration, retro magazine "
-        "illustration style, engraving and cross-hatching texture, muted "
-        "teal, warm sepia and gold color palette, painterly vintage poster "
-        "art, vertical portrait composition, empty calm negative space in "
-        "upper and lower thirds for text overlay, no text or letters in "
-        "the image, museum-quality illustration"
+        f"{mood}, hyper-detailed cinematic digital art, futuristic "
+        "sci-fi atmosphere, dramatic volumetric lighting, ultra realistic "
+        "render, 8k octane render quality, awe-inspiring epic scale, "
+        "vertical portrait composition, dark cinematic color grading, "
+        "clear open negative space in the upper third and center for text "
+        "overlay, no text or letters in the image, breathtaking concept art"
     )
     encoded = requests.utils.quote(prompt)
     seed = random.randint(1, 1_000_000)
@@ -109,10 +110,56 @@ def _fit_font(draw, text, font_path, max_width, start_size, min_size=28):
     return ImageFont.truetype(font_path, min_size)
 
 
-def _draw_centered_wrapped(draw, text, font_path, size, max_width, y, fill,
-                            img_w, line_spacing=1.35, shadow=True):
+def _add_gradient_scrim(img):
+    """Fon qanday bo'lishidan qat'i nazar matn o'qilishi uchun yuqori va pastki
+    qismga qorong'ulashtiruvchi gradient qatlam qo'shadi."""
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    grad = ImageDraw.Draw(overlay)
+    top_h = int(IMG_H * 0.42)
+    for i in range(top_h):
+        alpha = int(190 * (1 - i / top_h) ** 1.4)
+        grad.line([(0, i), (IMG_W, i)], fill=(0, 0, 0, alpha))
+    bottom_h = int(IMG_H * 0.35)
+    for i in range(bottom_h):
+        alpha = int(190 * (1 - i / bottom_h) ** 1.4)
+        y = IMG_H - i
+        grad.line([(0, y), (IMG_W, y)], fill=(0, 0, 0, alpha))
+    return Image.alpha_composite(img.convert("RGBA"), overlay)
+
+
+def _wrap_lines(draw, text, font_path, size, max_width, stroke_width=0):
     font = ImageFont.truetype(font_path, size)
-    # so'zlar bo'yicha o'rash
+    words = text.split(" ")
+    lines, current = [], ""
+    for w in words:
+        test = (current + " " + w).strip()
+        bbox = draw.textbbox((0, 0), test, font=font, stroke_width=stroke_width)
+        if bbox[2] - bbox[0] <= max_width or not current:
+            current = test
+        else:
+            lines.append(current)
+            current = w
+    if current:
+        lines.append(current)
+    return lines, font
+
+
+def _draw_lines_centered(draw, lines, font, y, fill, img_w, line_h, stroke_width=3):
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font, stroke_width=stroke_width)
+        w = bbox[2] - bbox[0]
+        x = (img_w - w) / 2
+        draw.text(
+            (x, y), line, font=font, fill=fill,
+            stroke_width=stroke_width, stroke_fill=(0, 0, 0, 235),
+        )
+        y += line_h
+    return y
+
+
+def _draw_centered_wrapped(draw, text, font_path, size, max_width, y, fill,
+                            img_w, line_spacing=1.35, stroke_width=3):
+    font = ImageFont.truetype(font_path, size)
     words = text.split(" ")
     lines, current = [], ""
     for w in words:
@@ -128,12 +175,14 @@ def _draw_centered_wrapped(draw, text, font_path, size, max_width, y, fill,
 
     line_h = int(size * line_spacing)
     for line in lines:
-        bbox = draw.textbbox((0, 0), line, font=font)
+        bbox = draw.textbbox((0, 0), line, font=font, stroke_width=stroke_width)
         w = bbox[2] - bbox[0]
         x = (img_w - w) / 2
-        if shadow:
-            draw.text((x + 2, y + 2), line, font=font, fill=(0, 0, 0, 160))
-        draw.text((x, y), line, font=font, fill=fill)
+        # Qora kontur - fon rangidan qat'i nazar matn har doim o'qiladigan bo'lishi uchun
+        draw.text(
+            (x, y), line, font=font, fill=fill,
+            stroke_width=stroke_width, stroke_fill=(0, 0, 0, 235),
+        )
         y += line_h
     return y
 
@@ -142,57 +191,74 @@ def render_quote_image(background_bytes: bytes, quote: dict) -> bytes:
     img = Image.open(io.BytesIO(background_bytes)).convert("RGB")
     if img.size != (IMG_W, IMG_H):
         img = img.resize((IMG_W, IMG_H))
+
+    # Kontrast uchun qorong'ulashtiruvchi gradient
+    img = _add_gradient_scrim(img)
     draw = ImageDraw.Draw(img, "RGBA")
 
     margin = 80
     max_w = IMG_W - margin * 2
-    y = int(IMG_H * 0.10)
 
-    # 1) Koreyscha asl matn
-    y = _draw_centered_wrapped(
-        draw, quote["korean"], FONT_KOREAN, 64, max_w, y,
-        fill=(255, 255, 255, 255), img_w=IMG_W,
-    )
-    y += 30
-
-    # 2) O'zbekcha tarjima
-    y = _draw_centered_wrapped(
-        draw, quote["translation"], FONT_LATIN, 44, max_w, y,
-        fill=(230, 220, 190, 255), img_w=IMG_W,
-    )
-
-    # 3) Kechqurungi post uchun - mulohaza savoli, pastda alohida ramkada
-    if quote.get("reflection"):
-        box_top = int(IMG_H * 0.72)
-        box_bottom = int(IMG_H * 0.88)
-        draw.rectangle(
-            [margin - 20, box_top, IMG_W - margin + 20, box_bottom],
-            fill=(0, 0, 0, 140),
-            outline=(230, 220, 190, 200),
-            width=2,
-        )
-        text_y = box_top + 30
-        _draw_centered_wrapped(
-            draw, quote["reflection"], FONT_LATIN_BOLD, 40,
-            max_w - 60, text_y, fill=(255, 255, 255, 255), img_w=IMG_W,
-            shadow=False,
-        )
-
-    # 4) Pastki-o'ng burchakka kanal nomi (watermark)
-    wm_font = ImageFont.truetype(FONT_LATIN_BOLD, 34)
+    # 1) Kanal nomi - YUQORI MARKAZDA, kichik badge ko'rinishida
+    #    (Instagram Reels/Stories'da pastki-chekka UI elementlar bilan
+    #    qoplanib qolmasligi uchun)
+    wm_font = ImageFont.truetype(FONT_LATIN_BOLD, 36)
     wm_text = "@korean_aforizm"
     bbox = draw.textbbox((0, 0), wm_text, font=wm_font)
     wm_w, wm_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    wx = IMG_W - wm_w - 50
-    wy = IMG_H - wm_h - 50
-    draw.rectangle(
-        [wx - 20, wy - 15, wx + wm_w + 20, wy + wm_h + 20],
-        fill=(0, 0, 0, 130),
+    wx = (IMG_W - wm_w) / 2
+    wy = int(IMG_H * 0.045)
+    draw.rounded_rectangle(
+        [wx - 28, wy - 16, wx + wm_w + 28, wy + wm_h + 24],
+        radius=30, fill=(0, 0, 0, 150),
     )
-    draw.text((wx, wy - bbox[1]), wm_text, font=wm_font, fill=(255, 255, 255, 235))
+    draw.text((wx, wy - bbox[1]), wm_text, font=wm_font, fill=(255, 255, 255, 245))
+
+    y = int(IMG_H * 0.14)
+
+    # 2) Koreyscha asl matn (Noto Serif KR - Batang uslubiga yaqin)
+    y = _draw_centered_wrapped(
+        draw, quote["korean"], FONT_KOREAN, 66, max_w, y,
+        fill=(255, 255, 255, 255), img_w=IMG_W,
+    )
+    y += 34
+
+    # 3) O'zbekcha tarjima
+    y = _draw_centered_wrapped(
+        draw, quote["translation"], FONT_LATIN, 44, max_w, y,
+        fill=(255, 214, 130, 255), img_w=IMG_W, stroke_width=2,
+    )
+
+    # 4) Kechqurungi post uchun - mulohaza savoli KOREYS TILIDA, pastda ramkada
+    #    (auditoriyaning 97% koreys millatiga mansub bo'lgani uchun)
+    reflection_text = quote.get("reflection_ko") or quote.get("reflection")
+    if reflection_text:
+        box_font_size = 42
+        box_max_w = max_w - 60
+        stroke_w = 2
+        lines, rfont = _wrap_lines(
+            draw, reflection_text, FONT_KOREAN_SEMIBOLD, box_font_size,
+            box_max_w, stroke_width=stroke_w,
+        )
+        line_h = int(box_font_size * 1.4)
+        pad_v = 40
+        text_block_h = len(lines) * line_h
+        box_h = text_block_h + pad_v * 2
+        box_top = int(IMG_H * 0.78) - box_h // 2
+        box_bottom = box_top + box_h
+        draw.rounded_rectangle(
+            [margin - 20, box_top, IMG_W - margin + 20, box_bottom],
+            radius=18, fill=(0, 0, 0, 175),
+            outline=(255, 214, 130, 210), width=2,
+        )
+        text_y = box_top + pad_v
+        _draw_lines_centered(
+            draw, lines, rfont, text_y, fill=(255, 255, 255, 255),
+            img_w=IMG_W, line_h=line_h, stroke_width=stroke_w,
+        )
 
     output = io.BytesIO()
-    img.save(output, format="JPEG", quality=92)
+    img.convert("RGB").save(output, format="JPEG", quality=92)
     return output.getvalue()
 
 
