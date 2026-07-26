@@ -215,9 +215,111 @@ QUOTES = [
         "mood": "full moon fading behind clouds at late evening, cyclical impermanence, deep blue and silver tones",
         "hashtags": ["#hayot", "#ozgarish", "#mulohaza"],
     },
+    {
+        "korean": "쥐구멍에도 볕 들 날 있다",
+        "breakdown": [
+            ("쥐구멍 (jwigumeong)", "sichqon teshigi/uyasi"),
+            ("에도 (edo)", "\"-da ham\" (o'rin qo'shimchasi + \"ham\")"),
+            ("볕 (byeot)", "quyosh nuri"),
+            ("들 (deul)", "kiradi (들다 fe'lining negizi)"),
+            ("날 (nal)", "kun"),
+            ("있다 (itda)", "bor, mavjud"),
+        ],
+        "grammar_note": (
+            "에도 — o'rin kelishigi (에) va \"ham\" yuklamasi (도) birikmasi, "
+            "\"hatto shu joyda ham\" ma'nosini kuchaytiradi."
+        ),
+        "translation": "Sichqon uyasiga ham quyosh nuri kiradigan kun keladi.",
+        "slot": "ertalab",
+        "reflection": None,
+        "mood": "single ray of sunlight breaking through a dark cave opening into vast light, hopeful contrast, dawn",
+        "hashtags": ["#umid", "#sabr", "#kunkeladi"],
+    },
+    {
+        "korean": "가는 정이 있어야 오는 정이 있다",
+        "breakdown": [
+            ("가는 (ganeun)", "ketayotgan (가다 fe'lining sifatdoshi)"),
+            ("정 (jeong)", "mehr-oqibat, chin insoniy bog'lanish (한자어, 情)"),
+            ("이 (i)", "ega qo'shimchasi"),
+            ("있어야 (isseoya)", "bo'lsagina (있다 + -어야 shart qo'shimchasi)"),
+            ("오는 (oneun)", "kelayotgan"),
+        ],
+        "grammar_note": (
+            "-어야 qo'shimchasi qattiq shartni bildiradi — \"faqat shunday "
+            "bo'lsagina, aks holda yo'q\" degan ma'noni beradi."
+        ),
+        "translation": "Ketgan mehr bo'lsagina, qaytgan mehr ham bo'ladi.",
+        "slot": "ertalab",
+        "reflection": None,
+        "mood": "two hands offering a warm cup of tea to another person at sunrise, gentle kindness, golden morning light",
+        "hashtags": ["#mehr", "#insoniylik", "#harakat"],
+    },
+    {
+        "korean": "아는 길도 물어 가라",
+        "breakdown": [
+            ("아는 (aneun)", "biladigan (알다 fe'lining sifatdoshi)"),
+            ("길 (gil)", "yo'l"),
+            ("도 (do)", "\"ham\" qo'shimchasi"),
+            ("물어 (mureo)", "so'rab (묻다 fe'lining bog'lovchi shakli)"),
+            ("가라 (gara)", "bor (가다 fe'lining buyruq shakli)"),
+        ],
+        "grammar_note": (
+            "-아/어 bog'lovchi shakli ikki harakatni ketma-ket bog'laydi: "
+            "\"so'rab, keyin bor\"."
+        ),
+        "translation": "Bilgan yo'lingizni ham so'rab boring.",
+        "slot": "ertalab",
+        "reflection": None,
+        "mood": "a traveler pausing to check a compass on a familiar sunrise path, quiet humility, warm light",
+        "hashtags": ["#kamtarlik", "#ehtiyotkorlik", "#harakat"],
+    },
+    {
+        "korean": "오늘도 수고했어요",
+        "breakdown": [
+            ("오늘도 (oneuldo)", "bugun ham (오늘 + 도 \"ham\")"),
+            ("수고했어요 (sugohaesseoyo)", "mehnat qildingiz, harakat qildingiz (수고하다 fe'lining hurmatli o'tgan zamoni)"),
+        ],
+        "grammar_note": (
+            "-았/었어요 — o'tgan zamon va hurmat darajasini birlashtiruvchi "
+            "qo'shimcha, kundalik muloyim nutqda eng ko'p ishlatiladigan shakl."
+        ),
+        "translation": "Bugun ham o'zingizga mehnatingiz uchun rahmat ayting.",
+        "slot": "kechqurun",
+        "reflection": "Bugun o'zingizga qanday mehr ko'rsatdingiz?",
+        "reflection_ko": "오늘 자신에게 어떤 다정함을 베푸셨나요?",
+        "mood": "warm blanket and a cup of tea by a window at night, cozy self-care atmosphere, soft lamp light",
+        "hashtags": ["#ozingizgamehr", "#dam", "#minnatdorchilik"],
+    },
+    {
+        "korean": "비 온 뒤에 땅이 굳어진다",
+        "breakdown": [
+            ("비 (bi)", "yomg'ir"),
+            ("온 (on)", "yog'gan (오다 fe'lining o'tgan zamon sifatdoshi)"),
+            ("뒤에 (dwie)", "keyin (뒤 \"orqa/keyin\" + 에 o'rin-payt)"),
+            ("땅 (ttang)", "yer, tuproq"),
+            ("이 (i)", "ega qo'shimchasi"),
+            ("굳어진다 (gudeojinda)", "qattiqlashadi, mustahkamlanadi"),
+        ],
+        "grammar_note": (
+            "뒤에 — \"keyin\" ma'nosidagi o'rin-payt birikmasi, bir voqeadan "
+            "keyingi holatni bildirish uchun ishlatiladi."
+        ),
+        "translation": "Yomg'irdan keyin yer yanada mustahkam bo'ladi.",
+        "slot": "kechqurun",
+        "reflection": "Qiyinchilikdan keyin siz qaysi jihatdan mustahkamlandingiz?",
+        "reflection_ko": "어려움을 겪은 뒤, 당신은 어떤 면에서 더 단단해졌나요?",
+        "mood": "fresh rain-soaked earth with new green sprouts emerging after a storm, renewal, soft morning light",
+        "hashtags": ["#mustahkamlik", "#sabr", "#yangilanish"],
+    },
 ]
 
 def get_random_quote(slot: str) -> dict:
-    import random
+    """Sana asosida navbat bilan tanlaydi - shu sabab ketma-ket ikki kun
+    bir xil maqol chiqmaydi. Ro'yxat tugagach, boshidan qayta aylanadi."""
+    import datetime
     pool = [q for q in QUOTES if q["slot"] == slot]
-    return random.choice(pool)
+    if not pool:
+        raise ValueError(f"'{slot}' uchun maqol topilmadi")
+    today = datetime.date.today()
+    index = today.toordinal() % len(pool)
+    return pool[index]
