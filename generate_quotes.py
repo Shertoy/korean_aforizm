@@ -10,9 +10,43 @@ import os
 import json
 import requests
 
+import time
+
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+TEXT_MODEL_FALLBACKS = [
+    "gemini-2.5-flash-lite",
+    "gemini-flash-latest",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+]
+_cached_model = None
+
+
+def _get_model() -> str:
+    global _cached_model
+    if _cached_model:
+        return _cached_model
+    response = requests.get(
+        "https://generativelanguage.googleapis.com/v1beta/models",
+        headers={"x-goog-api-key": GEMINI_API_KEY},
+        timeout=30,
+    )
+    response.raise_for_status()
+    available = {
+        m.get("name", "").replace("models/", "")
+        for m in response.json().get("models", [])
+        if "generateContent" in m.get("supportedGenerationMethods", [])
+    }
+    for candidate in TEXT_MODEL_FALLBACKS:
+        if candidate in available:
+            _cached_model = candidate
+            return candidate
+    flash = sorted(n for n in available if "flash" in n)
+    _cached_model = flash[0] if flash else sorted(available)[0]
+    return _cached_model
 
 THEMES = [
     ("ertalab", "harakat va boshlanish"),
@@ -31,16 +65,26 @@ def _call_gemini(prompt: str, use_search: bool = False, temperature: float = 0.4
     }
     if use_search:
         body["tools"] = [{"google_search": {}}]
-    response = requests.post(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-        headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
-        json=body,
-        timeout=60,
-    )
-    response.raise_for_status()
-    data = response.json()
-    parts = data["candidates"][0]["content"]["parts"]
-    return "".join(p.get("text", "") for p in parts).strip()
+
+    model = _get_model()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+    for attempt in range(4):
+        response = requests.post(
+            url,
+            headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+            json=body,
+            timeout=60,
+        )
+        if response.status_code == 429:
+            time.sleep(15 * (attempt + 1))  # bepul tarif chegarasiga hurmat - kutib, qayta urinish
+            continue
+        response.raise_for_status()
+        data = response.json()
+        parts = data["candidates"][0]["content"]["parts"]
+        return "".join(p.get("text", "") for p in parts).strip()
+
+    raise RuntimeError("Gemini so'rov chegarasi (rate limit) tufayli 4 urinishdan keyin ham muvaffaqiyatsiz")
 
 
 def _get_existing_korean_texts() -> list:
@@ -151,8 +195,12 @@ def generate_new_quotes(count: int = 3) -> list:
     theme_cycle = THEMES * 3  # yetarlicha urinish imkoniyati
 
     added = 0
+    consecutive_errors = 0
     for slot, theme in theme_cycle:
         if added >= count:
+            break
+        if consecutive_errors >= 4:
+            results.append({"status": "stopped", "note": "Ketma-ket xatolar ko'p, to'xtatildi. Birozdan keyin qayta urinib ko'ring."})
             break
         try:
             candidate = find_candidate(slot, theme, existing)
@@ -160,6 +208,8 @@ def generate_new_quotes(count: int = 3) -> list:
 
             if korean_text in existing:
                 results.append({"status": "skipped_duplicate", "korean": korean_text})
+                consecutive_errors = 0
+                time.sleep(3)
                 continue
 
             check = spellcheck_korean(korean_text)
@@ -169,13 +219,19 @@ def generate_new_quotes(count: int = 3) -> list:
                     "korean": korean_text,
                     "note": check.get("note"),
                 })
+                consecutive_errors = 0
+                time.sleep(3)
                 continue
 
             save_to_supabase(candidate, slot, theme)
             existing.append(korean_text)
             added += 1
+            consecutive_errors = 0
             results.append({"status": "added", "korean": korean_text, "slot": slot, "theme": theme})
+            time.sleep(3)  # Gemini bepul tarif chegarasiga hurmat
         except Exception as e:
+            consecutive_errors += 1
             results.append({"status": "error", "error": str(e)})
+            time.sleep(5)
 
     return results
