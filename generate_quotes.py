@@ -200,25 +200,31 @@ def generate_new_quotes(count: int = 3) -> list:
         if added >= count:
             break
         if consecutive_errors >= 4:
-            results.append({"status": "stopped", "note": "Ketma-ket xatolar ko'p, to'xtatildi. Birozdan keyin qayta urinib ko'ring."})
+            entry = {"status": "stopped", "note": "Ketma-ket xatolar ko'p, to'xtatildi. Birozdan keyin qayta urinib ko'ring."}
+            results.append(entry)
+            print(f"[generate_quotes] {entry}", flush=True)
             break
         try:
             candidate = find_candidate(slot, theme, existing)
             korean_text = candidate["korean"]
 
             if korean_text in existing:
-                results.append({"status": "skipped_duplicate", "korean": korean_text})
+                entry = {"status": "skipped_duplicate", "korean": korean_text}
+                results.append(entry)
+                print(f"[generate_quotes] {entry}", flush=True)
                 consecutive_errors = 0
                 time.sleep(3)
                 continue
 
             check = spellcheck_korean(korean_text)
             if not check.get("is_correct", False):
-                results.append({
+                entry = {
                     "status": "rejected_spelling",
                     "korean": korean_text,
                     "note": check.get("note"),
-                })
+                }
+                results.append(entry)
+                print(f"[generate_quotes] {entry}", flush=True)
                 consecutive_errors = 0
                 time.sleep(3)
                 continue
@@ -227,11 +233,15 @@ def generate_new_quotes(count: int = 3) -> list:
             existing.append(korean_text)
             added += 1
             consecutive_errors = 0
-            results.append({"status": "added", "korean": korean_text, "slot": slot, "theme": theme})
+            entry = {"status": "added", "korean": korean_text, "slot": slot, "theme": theme}
+            results.append(entry)
+            print(f"[generate_quotes] {entry}", flush=True)
             time.sleep(3)  # Gemini bepul tarif chegarasiga hurmat
         except Exception as e:
             consecutive_errors += 1
-            results.append({"status": "error", "error": str(e)})
+            entry = {"status": "error", "error": str(e)}
+            results.append(entry)
+            print(f"[generate_quotes] {entry}", flush=True)
             time.sleep(5)
 
     return results
