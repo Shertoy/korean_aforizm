@@ -22,12 +22,12 @@ TEXT_MODEL_FALLBACKS = [
     "gemini-2.5-flash",
     "gemini-2.0-flash",
 ]
-_cached_model = None
+_bad_models = set()
 
 
-def _get_model() -> str:
+def _get_model(force_refresh: bool = False) -> str:
     global _cached_model
-    if _cached_model:
+    if _cached_model and not force_refresh and _cached_model not in _bad_models:
         return _cached_model
     response = requests.get(
         "https://generativelanguage.googleapis.com/v1beta/models",
@@ -39,7 +39,7 @@ def _get_model() -> str:
         m.get("name", "").replace("models/", "")
         for m in response.json().get("models", [])
         if "generateContent" in m.get("supportedGenerationMethods", [])
-    }
+    } - _bad_models
     for candidate in TEXT_MODEL_FALLBACKS:
         if candidate in available:
             _cached_model = candidate
@@ -66,16 +66,21 @@ def _call_gemini(prompt: str, use_search: bool = False, temperature: float = 0.4
     if use_search:
         body["tools"] = [{"google_search": {}}]
 
-    model = _get_model()
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-
     for attempt in range(4):
+        model = _get_model()
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         response = requests.post(
             url,
             headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
             json=body,
             timeout=60,
         )
+        if response.status_code == 404:
+            _bad_models.add(model)
+            global _cached_model
+            _cached_model = None
+            _get_model(force_refresh=True)
+            continue
         if response.status_code == 429:
             time.sleep(15 * (attempt + 1))  # bepul tarif chegarasiga hurmat - kutib, qayta urinish
             continue
@@ -84,7 +89,7 @@ def _call_gemini(prompt: str, use_search: bool = False, temperature: float = 0.4
         parts = data["candidates"][0]["content"]["parts"]
         return "".join(p.get("text", "") for p in parts).strip()
 
-    raise RuntimeError("Gemini so'rov chegarasi (rate limit) tufayli 4 urinishdan keyin ham muvaffaqiyatsiz")
+    raise RuntimeError("Gemini so'rov 4 urinishdan keyin ham muvaffaqiyatsiz (model yoki rate limit muammosi)")
 
 
 def _get_existing_korean_texts() -> list:
