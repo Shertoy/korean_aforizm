@@ -418,6 +418,16 @@ def discover_quote():
     })
 
 
+def do_generate_quotes(count: int):
+    from generate_quotes import generate_new_quotes
+    try:
+        results = generate_new_quotes(count=count)
+        for r in results:
+            print(f"[generate_quotes] {r}")
+    except Exception as e:
+        print(f"[generate_quotes] XATO: {e}")
+
+
 @app.route("/generate_quotes")
 def generate_quotes_route():
     secret = request.args.get("key")
@@ -426,10 +436,13 @@ def generate_quotes_route():
     if not (SUPABASE_URL and SUPABASE_KEY):
         return jsonify({"error": "SUPABASE_URL / SUPABASE_KEY sozlanmagan"}), 500
 
-    from generate_quotes import generate_new_quotes
     count = int(request.args.get("count", 3))
-    results = generate_new_quotes(count=count)
-    return jsonify({"results": results})
+    thread = threading.Thread(target=do_generate_quotes, args=(count,), daemon=True)
+    thread.start()
+    return jsonify({
+        "status": "started",
+        "message": "Yangi maqollar orqa fonda tayyorlanmoqda (bir necha daqiqa vaqt olishi mumkin). Natijani Render Logs bo'limidan yoki Supabase jadvalidan tekshiring.",
+    })
 
 
 if __name__ == "__main__":
