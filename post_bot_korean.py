@@ -7,13 +7,48 @@ import requests
 from flask import Flask, request, jsonify
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-from quotes import QUOTES, get_random_quote
+from quotes import QUOTES, get_random_quote as get_local_quote
+
+
+def get_quote_for_slot(slot: str) -> dict:
+    """Avval Supabase'dan urinadi (agar sozlangan bo'lsa), aks holda
+    quotes.py'dagi mahalliy ro'yxatga qaytadi. Ikkalasida ham sana asosida
+    aylanma tanlaydi, shu sabab ketma-ket kunlar takrorlanmaydi."""
+    import datetime
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            response = requests.get(
+                f"{SUPABASE_URL}/rest/v1/quotes",
+                params={"slot": f"eq.{slot}", "select": "*", "order": "id.asc"},
+                headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"},
+                timeout=20,
+            )
+            response.raise_for_status()
+            rows = response.json()
+            if rows:
+                idx = datetime.date.today().toordinal() % len(rows)
+                row = rows[idx]
+                return {
+                    "korean": row["korean"],
+                    "translation": row["translation"],
+                    "breakdown": row["breakdown"],
+                    "grammar_note": row["grammar_note"],
+                    "reflection": row.get("reflection"),
+                    "reflection_ko": row.get("reflection_ko"),
+                    "mood": row["mood"],
+                    "hashtags": row["hashtags"],
+                }
+        except Exception as e:
+            print(f"Supabase'dan o'qishda xato, mahalliy ro'yxatga o'tildi: {e}")
+    return get_local_quote(slot)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID")  # @korean_aforizm
 TRIGGER_SECRET = os.environ.get("TRIGGER_SECRET")
-ADMIN_SECRET = os.environ.get("ADMIN_SECRET")  # /discover_quote uchun alohida kalit
+ADMIN_SECRET = os.environ.get("ADMIN_SECRET")  # /discover_quote, /generate_quotes uchun
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 SIGNATURE = "\n\nAlisher Asqad Ali\n@korean_aforizm"
 
@@ -303,7 +338,7 @@ def send_photo_to_telegram(image_bytes: bytes, caption: str) -> None:
 
 def do_post(slot: str):
     try:
-        quote = get_random_quote(slot)
+        quote = get_quote_for_slot(slot)
         image_bytes = generate_post_image(quote)
         caption = build_caption(quote)
         send_photo_to_telegram(image_bytes, caption)
@@ -381,6 +416,20 @@ def discover_quote():
         "note": "Bu taklif AVTOMATIK post qilinmaydi. Tekshirib, o'zingiz quotes.py ga qo'shing.",
         "raw_suggestion": raw_text,
     })
+
+
+@app.route("/generate_quotes")
+def generate_quotes_route():
+    secret = request.args.get("key")
+    if not ADMIN_SECRET or secret != ADMIN_SECRET:
+        return jsonify({"error": "Noto'g'ri yoki yo'q admin kaliti"}), 403
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return jsonify({"error": "SUPABASE_URL / SUPABASE_KEY sozlanmagan"}), 500
+
+    from generate_quotes import generate_new_quotes
+    count = int(request.args.get("count", 3))
+    results = generate_new_quotes(count=count)
+    return jsonify({"results": results})
 
 
 if __name__ == "__main__":
