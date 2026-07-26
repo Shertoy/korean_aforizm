@@ -420,12 +420,12 @@ def discover_quote():
 
 def do_generate_quotes(count: int):
     from generate_quotes import generate_new_quotes
+    print(f"[generate_quotes] BOSHLANDI (count={count})", flush=True)
     try:
         results = generate_new_quotes(count=count)
-        for r in results:
-            print(f"[generate_quotes] {r}")
+        print(f"[generate_quotes] TUGADI. Jami natija: {len(results)}", flush=True)
     except Exception as e:
-        print(f"[generate_quotes] XATO: {e}")
+        print(f"[generate_quotes] UMUMIY XATO: {e}", flush=True)
 
 
 @app.route("/generate_quotes")
