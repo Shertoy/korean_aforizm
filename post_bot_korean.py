@@ -11,23 +11,64 @@ from quotes import QUOTES, get_random_quote as get_local_quote
 
 
 def get_quote_for_slot(slot: str) -> dict:
-    """Avval Supabase'dan urinadi (agar sozlangan bo'lsa), aks holda
-    quotes.py'dagi mahalliy ro'yxatga qaytadi. Ikkalasida ham sana asosida
-    aylanma tanlaydi, shu sabab ketma-ket kunlar takrorlanmaydi."""
+    """1) Avval jonli ravishda YANGI, tekshirilgan matn yaratishga urinadi
+       (haqiqiylik + imlo tekshiruvidan o'tgandagina ishlatiladi).
+    2) Muvaffaqiyatsiz bo'lsa, Supabase'dagi eng kam ishlatilgan yozuvni oladi.
+    3) Ikkalasi ham ishlamasa, mahalliy quotes.py ro'yxatiga (sana asosida
+       aylanma) qaytadi. Shu tartib bilan post HECH QACHON to'liq
+       to'xtab qolmaydi, lekin imkon qadar har doim yangi va xilma-xil bo'ladi."""
     import datetime
+
+    # 1-BOSQICH: jonli generatsiya
+    if SUPABASE_URL and SUPABASE_KEY and GEMINI_API_KEY:
+        try:
+            from generate_quotes import generate_live_quote, save_to_supabase
+            candidate = generate_live_quote(slot)
+            save_to_supabase(candidate, slot, candidate.get("theme", ""))
+            print(f"[get_quote_for_slot] YANGI jonli matn yaratildi: {candidate['korean']}", flush=True)
+            return {
+                "korean": candidate["korean"],
+                "translation": candidate["translation_uzbek"],
+                "breakdown": candidate["breakdown"],
+                "grammar_note": candidate["grammar_note"],
+                "reflection": candidate.get("reflection_uzbek"),
+                "reflection_ko": candidate.get("reflection_ko"),
+                "mood": candidate["mood"],
+                "hashtags": candidate["hashtags"],
+            }
+        except Exception as e:
+            print(f"[get_quote_for_slot] Jonli generatsiya muvaffaqiyatsiz: {e}", flush=True)
+
+    # 2-BOSQICH: Supabase'dagi eng kam ishlatilgan (yoki eng uzoq vaqt oldin
+    # ishlatilgan) yozuvni olish
     if SUPABASE_URL and SUPABASE_KEY:
         try:
+            headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
             response = requests.get(
                 f"{SUPABASE_URL}/rest/v1/quotes",
-                params={"slot": f"eq.{slot}", "select": "*", "order": "id.asc"},
-                headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"},
-                timeout=20,
+                params={
+                    "slot": f"eq.{slot}",
+                    "select": "*",
+                    "order": "used_count.asc,last_used_at.asc.nullsfirst",
+                    "limit": "1",
+                },
+                headers=headers, timeout=20,
             )
             response.raise_for_status()
             rows = response.json()
             if rows:
-                idx = datetime.date.today().toordinal() % len(rows)
-                row = rows[idx]
+                row = rows[0]
+                requests.patch(
+                    f"{SUPABASE_URL}/rest/v1/quotes",
+                    params={"id": f"eq.{row['id']}"},
+                    headers={**headers, "Content-Type": "application/json", "Prefer": "return=minimal"},
+                    json={
+                        "used_count": (row.get("used_count") or 0) + 1,
+                        "last_used_at": str(datetime.date.today()),
+                    },
+                    timeout=20,
+                )
+                print(f"[get_quote_for_slot] Saqlangan bazadan olindi: {row['korean']}", flush=True)
                 return {
                     "korean": row["korean"],
                     "translation": row["translation"],
@@ -39,7 +80,10 @@ def get_quote_for_slot(slot: str) -> dict:
                     "hashtags": row["hashtags"],
                 }
         except Exception as e:
-            print(f"Supabase'dan o'qishda xato, mahalliy ro'yxatga o'tildi: {e}")
+            print(f"[get_quote_for_slot] Supabase bazasidan o'qishda xato: {e}", flush=True)
+
+    # 3-BOSQICH: mahalliy ro'yxat (oxirgi chora)
+    print("[get_quote_for_slot] Mahalliy ro'yxatga (fallback) o'tildi", flush=True)
     return get_local_quote(slot)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
