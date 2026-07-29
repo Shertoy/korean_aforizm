@@ -11,6 +11,7 @@ import json
 import requests
 
 import time
+import random
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -116,6 +117,13 @@ def _extract_json(text: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def find_candidate(slot: str, theme: str, existing: list) -> dict:
+    reflection_instruction = ""
+    if slot == "kechqurun":
+        reflection_instruction = (
+            '\n"reflection_uzbek": "o\'quvchini mulohaza qilishga undaydigan, '
+            'xulosasi oldindan belgilanmagan ochiq savol (o\'zbekcha)",'
+            '\n"reflection_ko": "xuddi shu savolning tabiiy, to\'g\'ri koreyscha tarjimasi (한국어)",'
+        )
     prompt = f"""
 Menga "{theme}" mavzusida, {slot} vaqti uchun mos, HAQIQIY va KENG TARQALGAN
 koreys xalq maqoli, 한자성어 (idioma) yoki keng qo'llaniladigan hikmatli ibora top.
@@ -133,7 +141,7 @@ Faqat quyidagi JSON formatda javob ber, boshqa hech narsa yozma:
   "breakdown": [["koreyscha bo'lak (talaffuz)", "o'zbekcha ma'no"], ...],
   "grammar_note": "eng muhim grammatik qo'shimcha yoki qolip haqida o'zbekcha izoh",
   "mood": "rasm foni uchun inglizcha kayfiyat tavsifi, 15-25 so'z",
-  "hashtags": ["#mavzu1", "#mavzu2", "#mavzu3"]
+  "hashtags": ["#mavzu1", "#mavzu2", "#mavzu3"]{reflection_instruction}
 }}
 """
     raw = _call_gemini(prompt, use_search=True, temperature=0.5)
@@ -191,6 +199,34 @@ def save_to_supabase(entry: dict, slot: str, theme: str) -> None:
 # ---------------------------------------------------------------------------
 # ASOSIY JARAYON
 # ---------------------------------------------------------------------------
+
+def generate_live_quote(slot: str) -> dict:
+    """Har bir /trigger chaqirilganda ISHGA TUSHADI: yangi mavzu tanlaydi,
+    haqiqiy va tasdiqlangan koreys ibora/iqtibos qidiradi, imlosini
+    tekshiradi. Faqat ikkala tekshiruvdan o'tgan matn qaytariladi."""
+    existing = _get_existing_korean_texts() if (SUPABASE_URL and SUPABASE_KEY) else []
+    themes = [t for s, t in THEMES if s == slot]
+    random.shuffle(themes)
+    last_error = None
+    for theme in themes:
+        for _ in range(2):
+            try:
+                candidate = find_candidate(slot, theme, existing)
+                korean_text = candidate["korean"]
+                if korean_text in existing:
+                    continue
+                check = spellcheck_korean(korean_text)
+                if not check.get("is_correct", False):
+                    print(f"[generate_live_quote] Imlo xatosi tufayli rad etildi: {korean_text}", flush=True)
+                    continue
+                candidate["theme"] = theme
+                return candidate
+            except Exception as e:
+                last_error = e
+                time.sleep(2)
+                continue
+    raise RuntimeError(f"Jonli generatsiya muvaffaqiyatsiz bo'ldi: {last_error}")
+
 
 def generate_new_quotes(count: int = 3) -> list:
     """count ta yangi, tasdiqlangan, imlosi to'g'ri yozuvni bazaga qo'shadi.
