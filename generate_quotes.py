@@ -50,12 +50,19 @@ def _get_model(force_refresh: bool = False) -> str:
     return _cached_model
 
 THEMES = [
-    ("ertalab", "harakat va boshlanish"),
-    ("ertalab", "sabr va izchillik"),
-    ("ertalab", "umid va yaxshilikka ishonch"),
-    ("kechqurun", "o'z-o'ziga mehr va dam olish"),
-    ("kechqurun", "vaqt va o'tkinchilik haqida mulohaza"),
-    ("kechqurun", "insoniy munosabatlar va minnatdorchilik"),
+    # ERTALAB - harakat, boshlanish, sabr, ishonch
+    ("ertalab", "harakat va boshlanish - qanday boshlash kerak"),
+    ("ertalab", "sabr va izchillik - eng qiyin damda davom etish"),
+    ("ertalab", "umid va yaxshilikka ishonch - mashaqqat keyin kelajak"),
+    ("ertalab", "kichik qadam - eng uzun yo'l bir qadamdan boshlanadi"),
+    
+    # KECHQURUN - kayfiyat, tushunish, o'sish, amaliy maslahat
+    ("kechqurun", "bugun berilgan gift - sevgiringni qad' qil, yaqinlarini qo'yinib ol"),
+    ("kechqurun", "chuqur tushunish - seniki katta emas, dunyo kattaroq"),
+    ("kechqurun", "o'z-o'ziga qadri - seniki ozg'ar, o'qing, kengaygin"),
+    ("kechqurun", "amaliy qadam - to'xtama, biror to'garakka kir, kam bo'l"),
+    ("kechqurun", "minnatdorchilik - ota-onangga qo'ng'iroq qil, ularni qaddir"),
+    ("kechqurun", "vaqt o'tadi - bu dum tugaydi, yangi kun bor, to'xta olmaz"),
 ]
 
 
