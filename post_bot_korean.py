@@ -257,46 +257,100 @@ def get_quote_for_slot(slot: str) -> dict:
 
 def generate_background(mood: str) -> bytes:
     import time
+    import base64
+
     style = (
-        "oil painting masterpiece style, dramatic chiaroscuro lighting like Rembrandt, "
-        "rich textured brushstrokes, classical renaissance composition, "
-        "deep shadows and golden highlights, museum quality fine art, "
-        "square 1:1 format, no text no letters, emotionally powerful visual storytelling"
+        "dramatic oil painting, chiaroscuro lighting, rich brushstrokes, "
+        "classical fine art composition, deep shadows golden highlights, "
+        "museum quality, square format, no text no letters"
     )
     prompt = f"{mood}, {style}"
+
+    # 1-MANBA: Gemini Imagen (Render serveridan ishlaydi, API kalitingiz bor)
+    if GEMINI_API_KEY:
+        try:
+            r = requests.post(
+                "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict",
+                headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+                json={
+                    "instances": [{"prompt": prompt}],
+                    "parameters": {"sampleCount": 1, "aspectRatio": "1:1"},
+                },
+                timeout=90,
+            )
+            if r.ok:
+                data = r.json()
+                b64 = (data.get("predictions") or [{}])[0].get("bytesBase64Encoded")
+                if b64:
+                    print("[bg] Gemini Imagen muvaffaqiyatli", flush=True)
+                    return base64.b64decode(b64)
+                print(f"[bg] Gemini Imagen: b64 topilmadi: {str(data)[:200]}", flush=True)
+            else:
+                print(f"[bg] Gemini Imagen xato: {r.status_code} {r.text[:200]}", flush=True)
+        except Exception as e:
+            print(f"[bg] Gemini Imagen exception: {e}", flush=True)
+
+    # 2-MANBA: Pollinations
     encoded = requests.utils.quote(prompt)
-    for attempt in range(5):
+    for attempt in range(3):
         seed = random.randint(1, 9_999_999)
         url = (
             f"https://image.pollinations.ai/prompt/{encoded}"
             f"?width={IMG_W}&height={IMG_H}&seed={seed}&nologo=true&model=flux"
         )
         try:
-            r = requests.get(url, timeout=150)
-            if r.status_code in (500, 502, 503):
-                print(f"[background] Pollinations {r.status_code}, {attempt+1}-urinish...", flush=True)
-                time.sleep(8 * (attempt + 1))
-                continue
-            r.raise_for_status()
-            if "image" in r.headers.get("Content-Type", ""):
-                print(f"[background] Rasm olindi (seed={seed})", flush=True)
+            r = requests.get(url, timeout=90)
+            if r.ok and "image" in r.headers.get("Content-Type", ""):
+                print("[bg] Pollinations muvaffaqiyatli", flush=True)
                 return r.content
+            print(f"[bg] Pollinations {r.status_code}", flush=True)
+            time.sleep(5)
         except Exception as e:
-            print(f"[background] {attempt+1}-urinish xato: {e}", flush=True)
-            time.sleep(8 * (attempt + 1))
+            print(f"[bg] Pollinations xato: {e}", flush=True)
+            time.sleep(5)
 
-    # Fallback: mazmunli gradient fon
-    print("[background] Pollinations ishlamadi, gradient fon ishlatiladi", flush=True)
-    img = Image.new("RGB", (IMG_W, IMG_H), (18, 28, 48))
-    draw = ImageDraw.Draw(img)
-    for i in range(IMG_H):
-        ratio = i / IMG_H
-        r_val = int(18 + 20 * ratio)
-        g_val = int(28 + 15 * ratio)
-        b_val = int(48 + 30 * ratio)
-        draw.line([(0, i), (IMG_W, i)], fill=(r_val, g_val, b_val))
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=93)
+    # FALLBACK: Pillow badiiy gradient
+    print("[bg] Barcha manbalar ishlamadi, Pillow art fon", flush=True)
+    import random as rnd
+    palettes = [
+        [(5,10,35),(15,30,65),(30,55,95),(10,20,50)],
+        [(40,15,5),(75,35,10),(55,22,8),(25,10,5)],
+        [(5,25,15),(12,48,28),(22,65,38),(8,32,20)],
+        [(20,5,35),(42,12,65),(58,22,80),(28,8,48)],
+        [(45,30,5),(80,55,12),(65,42,8),(32,22,4)],
+    ]
+    mood_lower = mood.lower()
+    if any(w in mood_lower for w in ["night","dark","deep","shadow","moon"]):
+        palette = palettes[0]
+    elif any(w in mood_lower for w in ["warm","love","heart","family"]):
+        palette = palettes[1]
+    elif any(w in mood_lower for w in ["nature","green","forest","hope"]):
+        palette = palettes[2]
+    elif any(w in mood_lower for w in ["evening","sunset","calm","peace"]):
+        palette = palettes[3]
+    else:
+        palette = rnd.choice(palettes)
+
+    img = Image.new("RGB", (IMG_W, IMG_H))
+    pixels = img.load()
+    for y in range(IMG_H):
+        t = y/IMG_H
+        idx = min(int(t*(len(palette)-1)), len(palette)-2)
+        t2 = t*(len(palette)-1)-idx
+        r1,g1,b1=palette[idx]; r2,g2,b2=palette[idx+1]
+        for x in range(IMG_W):
+            tx=x/IMG_W*0.25
+            pixels[x,y]=(max(0,min(255,int(r1+(r2-r1)*(t2+tx)))),max(0,min(255,int(g1+(g2-g1)*(t2+tx)))),max(0,min(255,int(b1+(b2-b1)*(t2+tx)))))
+    draw_art=ImageDraw.Draw(img,"RGBA")
+    cx,cy=IMG_W//2,IMG_H//3
+    lr,lg,lb=palette[-1]
+    for radius in range(380,0,-18):
+        alpha=int(20*(1-radius/380)**2)
+        draw_art.ellipse([cx-radius,cy-int(radius*0.65),cx+radius,cy+int(radius*0.65)],fill=(min(255,lr+130),min(255,lg+110),min(255,lb+90),alpha))
+    for _ in range(6000):
+        x=rnd.randint(0,IMG_W-1);y=rnd.randint(0,IMG_H-1);v=rnd.randint(-12,12);px=pixels[x,y]
+        pixels[x,y]=(max(0,min(255,px[0]+v)),max(0,min(255,px[1]+v)),max(0,min(255,px[2]+v)))
+    buf=io.BytesIO(); img.save(buf,format="JPEG",quality=93)
     return buf.getvalue()
 
 
