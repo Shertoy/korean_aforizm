@@ -186,7 +186,7 @@ Faqat JSON qaytar, boshqa hech narsa yozma:
   "translation": "o'zbekcha tabiiy, ravon tarjima",
   "breakdown": [["so'z (talaffuz)", "o'zbekcha ma'nosi"], ...],
   "grammar_note": "eng muhim grammatik qo'shimcha yoki qolip haqida o'zbekcha izoh (2-3 jumla)",
-  "mood": "rasm foni uchun inglizcha kayfiyat va sahna tavsifi — 20-30 so'z, hi-tech futuristik uslub",
+  "mood": "emotionally powerful scene that captures the essence of this quote — describe a specific visual moment (person, nature, objects in action), cinematic and painterly, 20-30 words in English",
   "hashtags": ["#tag1", "#tag2", "#tag3"]{reflection_field}
 }}
 """
@@ -257,33 +257,35 @@ def get_quote_for_slot(slot: str) -> dict:
 
 def generate_background(mood: str) -> bytes:
     import time
-    prompt = (
-        f"{mood}, hyper-detailed cinematic digital art, futuristic sci-fi atmosphere, "
-        "dramatic volumetric lighting, ultra realistic 8k octane render, "
-        "square 1:1 composition, dark cinematic color grading, "
-        "open empty center for text overlay, no text no letters, breathtaking concept art"
+    style = (
+        "oil painting masterpiece style, dramatic chiaroscuro lighting like Rembrandt, "
+        "rich textured brushstrokes, classical renaissance composition, "
+        "deep shadows and golden highlights, museum quality fine art, "
+        "square 1:1 format, no text no letters, emotionally powerful visual storytelling"
     )
+    prompt = f"{mood}, {style}"
     encoded = requests.utils.quote(prompt)
-    for attempt in range(4):
-        seed = random.randint(1, 1_000_000)
+    for attempt in range(5):
+        seed = random.randint(1, 9_999_999)
         url = (
             f"https://image.pollinations.ai/prompt/{encoded}"
-            f"?width={IMG_W}&height={IMG_H}&seed={seed}&nologo=true"
+            f"?width={IMG_W}&height={IMG_H}&seed={seed}&nologo=true&model=flux"
         )
         try:
-            r = requests.get(url, timeout=120)
-            if r.status_code == 500:
-                print(f"[background] Pollinations 500, {attempt+1}-urinish...", flush=True)
-                time.sleep(5)
+            r = requests.get(url, timeout=150)
+            if r.status_code in (500, 502, 503):
+                print(f"[background] Pollinations {r.status_code}, {attempt+1}-urinish...", flush=True)
+                time.sleep(8 * (attempt + 1))
                 continue
             r.raise_for_status()
             if "image" in r.headers.get("Content-Type", ""):
+                print(f"[background] Rasm olindi (seed={seed})", flush=True)
                 return r.content
         except Exception as e:
             print(f"[background] {attempt+1}-urinish xato: {e}", flush=True)
-            time.sleep(5)
+            time.sleep(8 * (attempt + 1))
 
-    # Fallback: oddiy gradient fon
+    # Fallback: mazmunli gradient fon
     print("[background] Pollinations ishlamadi, gradient fon ishlatiladi", flush=True)
     img = Image.new("RGB", (IMG_W, IMG_H), (18, 28, 48))
     draw = ImageDraw.Draw(img)
