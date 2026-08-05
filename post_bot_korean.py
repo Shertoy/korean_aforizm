@@ -175,11 +175,9 @@ def generate_live_quote(slot: str) -> dict:
         try:
             prompt = f"""
 Senga "{theme}" mavzusida, "{slot}" vaqti uchun mos HAQIQIY va KENG TARQALGAN
-koreys xalq maqoli, 속담 yoki 한자성어 topishingni so'rayman.
+koreys xalq maqoli, 속담 yoki 한자성어 top.
 
-Google orqali maqolning haqiqatan koreys tilida keng ishlatilishini TEKSHIR.
-To'qima, fabrikatsiya qilma.
-
+MUHIM: Faqat haqiqiy, keng tarqalgan maqollarni yoz. To'qima, fabrikatsiya qilma.
 Quyidagilar allaqachon ishlatilgan, ularni TAKRORLAMA: {used[:20]}
 
 Faqat JSON qaytar, boshqa hech narsa yozma:
@@ -192,7 +190,7 @@ Faqat JSON qaytar, boshqa hech narsa yozma:
   "hashtags": ["#tag1", "#tag2", "#tag3"]{reflection_field}
 }}
 """
-            raw = _gemini(prompt, search=True, temp=0.6)
+            raw = _gemini(prompt, search=False, temp=0.6)
             entry = _extract_json(raw)
             if entry.get("korean") and entry["korean"] not in used:
                 entry["slot"] = slot
