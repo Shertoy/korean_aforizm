@@ -256,22 +256,46 @@ def get_quote_for_slot(slot: str) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def generate_background(mood: str) -> bytes:
+    import time
     prompt = (
         f"{mood}, hyper-detailed cinematic digital art, futuristic sci-fi atmosphere, "
         "dramatic volumetric lighting, ultra realistic 8k octane render, "
         "square 1:1 composition, dark cinematic color grading, "
         "open empty center for text overlay, no text no letters, breathtaking concept art"
     )
-    seed = random.randint(1, 1_000_000)
-    url = (
-        f"https://image.pollinations.ai/prompt/{requests.utils.quote(prompt)}"
-        f"?width={IMG_W}&height={IMG_H}&seed={seed}&nologo=true"
-    )
-    r = requests.get(url, timeout=120)
-    r.raise_for_status()
-    if "image" not in r.headers.get("Content-Type", ""):
-        raise RuntimeError(f"Rasm kelmadi: {r.text[:200]}")
-    return r.content
+    encoded = requests.utils.quote(prompt)
+    for attempt in range(4):
+        seed = random.randint(1, 1_000_000)
+        url = (
+            f"https://image.pollinations.ai/prompt/{encoded}"
+            f"?width={IMG_W}&height={IMG_H}&seed={seed}&nologo=true"
+        )
+        try:
+            r = requests.get(url, timeout=120)
+            if r.status_code == 500:
+                print(f"[background] Pollinations 500, {attempt+1}-urinish...", flush=True)
+                time.sleep(5)
+                continue
+            r.raise_for_status()
+            if "image" in r.headers.get("Content-Type", ""):
+                return r.content
+        except Exception as e:
+            print(f"[background] {attempt+1}-urinish xato: {e}", flush=True)
+            time.sleep(5)
+
+    # Fallback: oddiy gradient fon
+    print("[background] Pollinations ishlamadi, gradient fon ishlatiladi", flush=True)
+    img = Image.new("RGB", (IMG_W, IMG_H), (18, 28, 48))
+    draw = ImageDraw.Draw(img)
+    for i in range(IMG_H):
+        ratio = i / IMG_H
+        r_val = int(18 + 20 * ratio)
+        g_val = int(28 + 15 * ratio)
+        b_val = int(48 + 30 * ratio)
+        draw.line([(0, i), (IMG_W, i)], fill=(r_val, g_val, b_val))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=93)
+    return buf.getvalue()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
